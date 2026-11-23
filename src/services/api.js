@@ -17,8 +17,11 @@ export function apiUrl(path, scenario = "normal") {
 
 export async function getResource(
   path,
-  { signal, scenario = "normal", shape = "list" } = {},
+  { signal, scenario = "normal", validate } = {},
 ) {
+  if (typeof validate !== "function") {
+    throw new TypeError("La consulta requiere un validador de respuesta.");
+  }
   try {
     const response = await fetch(apiUrl(path, scenario), {
       signal,
@@ -41,23 +44,7 @@ export async function getResource(
         "La respuesta del servicio no es válida. Intenta nuevamente.",
       );
     }
-    const isCategory = path === "categories";
-    const validRecord = (item) =>
-      item &&
-      typeof item.id === "string" &&
-      (isCategory
-        ? typeof item.name === "string" && typeof item.description === "string"
-        : typeof item.title === "string" &&
-          typeof item.author === "string" &&
-          typeof item.categoryId === "string" &&
-          Number.isFinite(item.price) &&
-          item.price >= 0 &&
-          typeof item.description === "string");
-    if (
-      shape === "list"
-        ? !Array.isArray(data) || !data.every(validRecord)
-        : !validRecord(data)
-    ) {
+    if (!validate(data)) {
       throw new ApiError(
         "Los datos recibidos están incompletos. Intenta cargar el contenido nuevamente.",
       );

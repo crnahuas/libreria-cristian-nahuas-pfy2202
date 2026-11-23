@@ -96,6 +96,8 @@ test("permite buscar, ordenar por precio y navegar a 320 px sin repetir la consu
   await expect(
     page.getByRole("link", { name: "Desolación", exact: true }),
   ).toBeVisible();
+  // StrictMode puede iniciar y cancelar una consulta durante el montaje en desarrollo.
+  const initialBookRequests = bookRequests;
   await page
     .getByRole("searchbox", { name: "Buscar en el catálogo" })
     .fill("desolacion");
@@ -116,7 +118,7 @@ test("permite buscar, ordenar por precio y navegar a 320 px sin repetir la consu
   await expect(
     page.getByRole("link", { name: "Desolación", exact: true }),
   ).toBeVisible();
-  expect(bookRequests).toBe(1);
+  expect(bookRequests).toBe(initialBookRequests);
   await page.setViewportSize({ width: 320, height: 780 });
   expect(
     await page.evaluate(

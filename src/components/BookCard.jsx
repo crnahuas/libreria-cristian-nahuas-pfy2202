@@ -1,38 +1,6 @@
 import { Link } from "react-router";
-import { useState } from "react";
-
-export const formatPrice = (price) =>
-  new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(
-    price,
-  );
-
-export function BookCover({ book, large = false }) {
-  const [failedImage, setFailedImage] = useState(null);
-  const showImage = book.coverImage && failedImage !== book.coverImage;
-  return (
-    <div
-      aria-hidden="true"
-      className={`book-cover ${book.accent || "wine"} ${book.title.length > 40 ? "long-title" : ""} ${large ? "large" : ""} ${showImage ? "book-cover--image" : ""}`}
-    >
-      {showImage ? (
-        <img
-          src={book.coverImage}
-          alt=""
-          loading={large ? "eager" : "lazy"}
-          decoding="async"
-          onError={() => setFailedImage(book.coverImage)}
-        />
-      ) : (
-        <>
-          <span className="cover-author">{book.author}</span>
-          <span className="cover-title">{book.title}</span>
-          <span className="cover-art" />
-          <span className="cover-publisher">entre líneas</span>
-        </>
-      )}
-    </div>
-  );
-}
+import BookCover from "./BookCover.jsx";
+import { formatPrice } from "../utils/formatPrice.js";
 
 export default function BookCard({ book, categoryName }) {
   return (
@@ -45,9 +13,7 @@ export default function BookCard({ book, categoryName }) {
       >
         <BookCover book={book} />
       </Link>
-      <p className="book-category">
-        {categoryName || book.categoryId.replaceAll("-", " ")}
-      </p>
+      <p className="book-category">{categoryName}</p>
       <h2>
         <Link to={`/libros/${book.id}`}>{book.title}</Link>
       </h2>

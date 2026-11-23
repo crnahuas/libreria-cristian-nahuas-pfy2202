@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { BookCover } from "../src/components/BookCard.jsx";
+import BookCover from "../src/components/BookCover.jsx";
 
 describe("Portadas remotas y alternativa local", () => {
   it("muestra la portada recibida por REST y recupera título y autor si falla", () => {

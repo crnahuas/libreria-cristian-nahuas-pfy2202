@@ -1,21 +1,26 @@
 import { Link, useParams } from "react-router";
 import { useResource } from "../hooks/useResource.js";
 import usePageTitle from "../hooks/usePageTitle.js";
-import { BookCover, formatPrice } from "../components/BookCard.jsx";
+import BookCover from "../components/BookCover.jsx";
+import { formatPrice } from "../utils/formatPrice.js";
+import { useScenarioResource } from "../hooks/useScenarioResource.js";
+import { isBook, isCategoryList } from "../services/validators.js";
+import { selectCategoryName } from "../selectors/categories.js";
 import RequestState from "../components/RequestState.jsx";
 import ServiceControls from "../components/ServiceControls.jsx";
 
 export default function BookDetail() {
   const { bookId } = useParams();
-  const resource = useResource(`books/${encodeURIComponent(bookId)}`, {
-    shape: "object",
-    interactive: true,
+  const resource = useScenarioResource(`books/${encodeURIComponent(bookId)}`, {
+    validate: isBook,
+    allowEmpty: false,
   });
-  const categories = useResource("categories");
   const book = resource.data;
-  const category = categories.data?.find(
-    (item) => item.id === book?.categoryId,
-  );
+  const categories = useResource("categories", {
+    validate: isCategoryList,
+    enabled: Boolean(book?.categoryId),
+  });
+  const categoryName = selectCategoryName(categories.data, book?.categoryId);
   usePageTitle(book?.title || "Detalle del libro");
   return (
     <div className="wrap page-content">
@@ -49,7 +54,7 @@ export default function BookDetail() {
               className="detail-category"
               to={`/categorias/${book.categoryId}`}
             >
-              {category?.name || book.categoryId.replaceAll("-", " ")}
+              {categoryName}
             </Link>
             <h1>{book.title}</h1>
             <p className="detail-author">{book.author}</p>
@@ -72,12 +77,14 @@ export default function BookDetail() {
               </div>
             </dl>
             <Link className="button" to={`/categorias/${book.categoryId}`}>
-              Ver más de {category?.name || "esta categoría"}{" "}
+              Ver más de {categoryName}
             </Link>
           </div>
         </article>
       )}
-      <RequestState resource={categories} label="la categoría del libro" />
+      {book?.categoryId && (
+        <RequestState resource={categories} label="la categoría del libro" />
+      )}
       <ServiceControls resource={resource} allowEmpty={false} />
     </div>
   );

@@ -1,5 +1,6 @@
 import { Link } from "react-router";
-import { useResource } from "../hooks/useResource.js";
+import { useScenarioResource } from "../hooks/useScenarioResource.js";
+import { isCategoryList } from "../services/validators.js";
 import usePageTitle from "../hooks/usePageTitle.js";
 import RequestState from "../components/RequestState.jsx";
 import ServiceControls from "../components/ServiceControls.jsx";
@@ -8,7 +9,9 @@ import CategoryImage from "../components/CategoryImage.jsx";
 
 export default function Categories() {
   usePageTitle("Categorías");
-  const categories = useResource("categories", { interactive: true });
+  const categories = useScenarioResource("categories", {
+    validate: isCategoryList,
+  });
   return (
     <div className="wrap page-content">
       <p className="breadcrumbs">

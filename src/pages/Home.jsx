@@ -1,13 +1,17 @@
 import { Link } from "react-router";
 import usePageTitle from "../hooks/usePageTitle.js";
 import { useResource } from "../hooks/useResource.js";
-import BookCard, { BookCover, formatPrice } from "../components/BookCard.jsx";
+import BookCard from "../components/BookCard.jsx";
+import BookCover from "../components/BookCover.jsx";
+import { formatPrice } from "../utils/formatPrice.js";
+import { isBookList, isCategoryList } from "../services/validators.js";
+import { selectCategoryName } from "../selectors/categories.js";
 import RequestState from "../components/RequestState.jsx";
 
 export default function Home() {
   usePageTitle("Inicio");
-  const books = useResource("books");
-  const categories = useResource("categories");
+  const books = useResource("books?limit=4", { validate: isBookList });
+  const categories = useResource("categories", { validate: isCategoryList });
   const featured = books.data?.[0];
   return (
     <div className="wrap home-page">
@@ -29,7 +33,7 @@ export default function Home() {
             Prefiero buscar por categoría
           </Link>
         </div>
-        {featured ? (
+        {featured && (
           <Link
             className="hero-feature"
             to={`/libros/${featured.id}`}
@@ -48,10 +52,6 @@ export default function Home() {
               </span>
             </div>
           </Link>
-        ) : (
-          <div className="hero-pending">
-            <RequestState resource={books} label="el catálogo" />
-          </div>
         )}
       </section>
       <section
@@ -65,17 +65,13 @@ export default function Home() {
             Ver todos los libros
           </Link>
         </div>
-        {featured && <RequestState resource={books} label="los libros" />}
+        <RequestState resource={books} label="los libros" />
         <div className="book-grid home-book-grid">
-          {books.data?.slice(0, 4).map((book) => (
+          {books.data?.map((book) => (
             <BookCard
               key={book.id}
               book={book}
-              categoryName={
-                categories.data?.find(
-                  (category) => category.id === book.categoryId,
-                )?.name
-              }
+              categoryName={selectCategoryName(categories.data, book.categoryId)}
             />
           ))}
         </div>

@@ -1,5 +1,5 @@
-import React from "react";
-import { describe, expect, it } from "vitest";
+import React, { useEffect } from "react";
+import { describe, expect, it, vi } from "vitest";
 import {
   render,
   screen,
@@ -8,14 +8,22 @@ import {
   within,
 } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { http, HttpResponse, delay } from "msw";
 import App from "../src/App.jsx";
 import { createQueryClient } from "../src/services/queryClient.js";
 import { server } from "./setup.js";
-import { categories as mockCategories } from "../src/mocks/data.js";
+import { books as mockBooks, categories as mockCategories } from "../src/mocks/data.js";
 
-function renderApp(route = "/catalogo") {
+function LocationObserver({ onLocation }) {
+  const { pathname, search } = useLocation();
+  useEffect(() => {
+    onLocation(`${pathname}${search}`);
+  }, [pathname, search, onLocation]);
+  return null;
+}
+
+function renderApp(route = "/catalogo", onLocation) {
   const client = createQueryClient();
   // Evita temporizadores de recolección después de cada prueba.
   client.setDefaultOptions({
@@ -24,6 +32,7 @@ function renderApp(route = "/catalogo") {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[route]}>
+        {onLocation && <LocationObserver onLocation={onLocation} />}
         <App />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -32,6 +41,81 @@ function renderApp(route = "/catalogo") {
 }
 
 describe("Navegación y estados de las consultas", () => {
+  it("solicita cuatro libros y categorías en inicio con un indicador por recurso", async () => {
+    const requests = [];
+    server.use(
+      http.get("*/api/books", async ({ request }) => {
+        requests.push(new URL(request.url).search);
+        await delay(30);
+        return HttpResponse.json(mockBooks.slice(0, 4));
+      }),
+    );
+    renderApp("/");
+    expect(screen.getAllByText("Cargando los libros…")).toHaveLength(1);
+    expect(screen.getAllByText("Cargando las categorías…")).toHaveLength(1);
+    await screen.findByRole("link", { name: "Orgullo y prejuicio", exact: true });
+    expect(screen.getAllByRole("article")).toHaveLength(4);
+    expect(requests).toEqual(["?limit=4"]);
+  });
+  it("no consulta categorías antes de recuperar un libro que falló", async () => {
+    let categoryRequests = 0;
+    server.use(
+      http.get("*/api/categories", () => {
+        categoryRequests++;
+        return HttpResponse.json(mockCategories);
+      }),
+    );
+    renderApp("/libros/frankenstein?scenario=500");
+    expect(screen.getAllByText("Cargando el libro…")).toHaveLength(1);
+    expect(screen.queryByText("Cargando la categoría del libro…")).toBeNull();
+    expect((await screen.findByRole("alert")).textContent).toContain("500");
+    expect(categoryRequests).toBe(0);
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    await screen.findByRole("heading", { name: "Frankenstein", level: 1 });
+    await waitFor(() => expect(categoryRequests).toBe(1));
+    await waitFor(() =>
+      expect(screen.queryByText("Cargando la categoría del libro…")).toBeNull(),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+  it("difiere la URL, conserva otros parámetros y filtra sin nuevas peticiones", async () => {
+    let bookRequests = 0;
+    const onLocation = vi.fn();
+    server.use(
+      http.get("*/api/books", () => {
+        bookRequests++;
+        return HttpResponse.json(mockBooks);
+      }),
+    );
+    renderApp("/catalogo?scenario=normal&source=prueba", onLocation);
+    await screen.findByRole("link", { name: "Desolación", exact: true });
+    const search = screen.getByRole("searchbox", {
+      name: "Buscar en el catálogo",
+    });
+    for (const value of ["d", "des", "desolacion"]) {
+      fireEvent.change(search, { target: { value } });
+    }
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(onLocation.mock.calls.some(([url]) => url.includes("q="))).toBe(false);
+    fireEvent.change(screen.getByLabelText("Ordenar"), {
+      target: { value: "price-asc" },
+    });
+    await waitFor(() =>
+      expect(onLocation.mock.lastCall[0]).toContain("q=desolacion"),
+    );
+    const params = new URLSearchParams(onLocation.mock.lastCall[0].split("?")[1]);
+    expect(params.get("sort")).toBe("price-asc");
+    expect(params.get("scenario")).toBe("normal");
+    expect(params.get("source")).toBe("prueba");
+    expect(
+      onLocation.mock.calls.filter(([url]) => url.includes("q=")),
+    ).toHaveLength(1);
+    expect(bookRequests).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
+    await waitFor(() => expect(onLocation.mock.lastCall[0]).not.toContain("q="));
+    expect(onLocation.mock.lastCall[0]).toContain("sort=price-asc");
+  });
   it("permite salir de una carga lenta y cancela la petición anterior", async () => {
     let slowStarted = false;
     let slowAborted = false;

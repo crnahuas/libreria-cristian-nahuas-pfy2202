@@ -30,15 +30,31 @@ export const handlers = [
   http.get("*/api/books", async ({ request }) => {
     const simulated = await simulate(request);
     if (simulated) return simulated;
-    const category = new URL(request.url).searchParams.get("category");
+    const params = new URL(request.url).searchParams;
+    const category = params.get("category");
     if (category && !categories.some((item) => item.id === category)) {
       return HttpResponse.json(
         { message: "La categoría no existe." },
         { status: 404 },
       );
     }
+    const limit = params.get("limit");
+    if (
+      limit !== null &&
+      (!/^\d+$/.test(limit) ||
+        Number(limit) < 1 ||
+        !Number.isSafeInteger(Number(limit)))
+    ) {
+      return HttpResponse.json(
+        { message: "El límite debe ser un entero positivo." },
+        { status: 400 },
+      );
+    }
+    const filtered = category
+      ? books.filter((book) => book.categoryId === category)
+      : books;
     return HttpResponse.json(
-      category ? books.filter((book) => book.categoryId === category) : books,
+      limit === null ? filtered : filtered.slice(0, Number(limit)),
     );
   }),
   http.get("*/api/books/:bookId", async ({ request, params }) => {

@@ -1,58 +1,89 @@
-import { Link, useParams, useSearchParams } from "react-router";
-import { useEffect, useRef } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router";
+import { useEffect, useMemo, useState } from "react";
 import { useResource } from "../hooks/useResource.js";
+import { useScenarioResource } from "../hooks/useScenarioResource.js";
+import { isBookList, isCategoryList } from "../services/validators.js";
+import { selectCategory, selectCategoryName } from "../selectors/categories.js";
 import usePageTitle from "../hooks/usePageTitle.js";
 import BookCard from "../components/BookCard.jsx";
 import RequestState from "../components/RequestState.jsx";
 import ServiceControls from "../components/ServiceControls.jsx";
 import StateArt from "../components/StateArt.jsx";
 
+const normalize = (value) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es");
+
 export default function Catalog() {
   const { categoryId } = useParams();
+  const { pathname } = useLocation();
   const [params, setParams] = useSearchParams();
-  const latestParams = useRef(params);
-  useEffect(() => {
-    latestParams.current = params;
-  }, [params]);
-  const search = params.get("q") || "";
+  const urlSearch = params.get("q") || "";
+  const [search, setSearch] = useState(urlSearch);
   const sort = params.get("sort") || "default";
-  const categories = useResource("categories");
-  const books = useResource(
+  const categories = useResource("categories", { validate: isCategoryList });
+  const books = useScenarioResource(
     categoryId ? `books?category=${encodeURIComponent(categoryId)}` : "books",
-    { interactive: true },
+    { validate: isBookList },
   );
-  const category = categories.data?.find((item) => item.id === categoryId);
-  const title =
-    category?.name ||
-    (categoryId ? "Libros por categoría" : "Todos los libros");
-  const normalize = (value) =>
-    value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLocaleLowerCase("es");
-  const visibleBooks = books.data?.filter((book) =>
-    normalize(`${book.title} ${book.author}`).includes(
-      normalize(search.trim()),
-    ),
-  );
-  if (sort === "price-asc") visibleBooks?.sort((a, b) => a.price - b.price);
-  if (sort === "price-desc") visibleBooks?.sort((a, b) => b.price - a.price);
-  if (sort === "title")
-    visibleBooks?.sort((a, b) => a.title.localeCompare(b.title, "es"));
+  const category = selectCategory(categories.data, categoryId);
+  const title = categoryId
+    ? selectCategoryName(categories.data, categoryId)
+    : "Todos los libros";
+
+  // Recupera la búsqueda al navegar, incluidos Atrás y Adelante.
+  useEffect(() => {
+    setSearch(urlSearch);
+  }, [urlSearch, pathname]);
+
+  // El campo filtra de inmediato; la URL se actualiza al terminar de escribir.
+  useEffect(() => {
+    if (search === urlSearch) return;
+    const timeout = setTimeout(() => {
+      setParams(
+        (current) => {
+          const updated = new URLSearchParams(current);
+          if (search) updated.set("q", search);
+          else updated.delete("q");
+          return updated;
+        },
+        { replace: true },
+      );
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [search, urlSearch, pathname, setParams]);
+
+  const visibleBooks = useMemo(() => {
+    const term = normalize(search.trim());
+    const filtered = books.data?.filter((book) =>
+      normalize(`${book.title} ${book.author}`).includes(term),
+    );
+    if (sort === "price-asc") filtered?.sort((a, b) => a.price - b.price);
+    if (sort === "price-desc") filtered?.sort((a, b) => b.price - a.price);
+    if (sort === "title")
+      filtered?.sort((a, b) => a.title.localeCompare(b.title, "es"));
+    return filtered;
+  }, [books.data, search, sort]);
+
   function updateParam(key, value) {
-    // Conserva cambios consecutivos mientras React Router completa la navegación.
-    const updated = new URLSearchParams(latestParams.current);
-    if (value) updated.set(key, value);
-    else updated.delete(key);
-    latestParams.current = updated;
-    setParams(updated, { replace: true });
+    setParams(
+      (current) => {
+        const updated = new URLSearchParams(current);
+        if (value && value !== "default") updated.set(key, value);
+        else updated.delete(key);
+        return updated;
+      },
+      { replace: true },
+    );
   }
   usePageTitle(title);
   return (
     <div className="wrap page-content">
       <p className="breadcrumbs">
         <Link to="/">Inicio</Link> / <Link to="/catalogo">Catálogo</Link>
-        {categoryId && <> / {category?.name || categoryId}</>}
+        {categoryId && <> / {selectCategoryName(categories.data, categoryId)}</>}
       </p>
       <div className="page-heading">
         <h1>{title}</h1>
@@ -119,20 +150,20 @@ export default function Catalog() {
           </div>
           <div className="catalog-search">
             <label htmlFor="catalog-search">
-              Buscar en {category?.name || "el catálogo"}
+              Buscar en{" "}
+              {categoryId
+                ? selectCategoryName(categories.data, categoryId)
+                : "el catálogo"}
             </label>
             <input
               id="catalog-search"
               type="search"
               placeholder="Escribe un título o autor"
               value={search}
-              onChange={(event) => updateParam("q", event.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
             />
             {search && (
-              <button
-                className="text-link"
-                onClick={() => updateParam("q", "")}
-              >
+              <button className="text-link" onClick={() => setSearch("")}>
                 Limpiar búsqueda
               </button>
             )}
@@ -161,10 +192,10 @@ export default function Catalog() {
               <BookCard
                 key={book.id}
                 book={book}
-                categoryName={
-                  categories.data?.find((item) => item.id === book.categoryId)
-                    ?.name
-                }
+                categoryName={selectCategoryName(
+                  categories.data,
+                  book.categoryId,
+                )}
               />
             ))}
           </div>
